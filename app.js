@@ -3,12 +3,12 @@
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const RSS_FEEDS = [
-  { url: 'https://feeds.reuters.com/reuters/businessNews',          category: 'Finance',    source: 'Reuters' },
-  { url: 'https://www.livemint.com/rss/money',                      category: 'Finance',    source: 'Mint' },
-  { url: 'https://economictimes.indiatimes.com/markets/rss.cms',    category: 'Finance',    source: 'Economic Times' },
-  { url: 'https://feeds.feedburner.com/TechCrunch',                 category: 'Technology', source: 'TechCrunch' },
+  { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664', category: 'Finance',    source: 'CNBC' },
+  { url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',          category: 'Finance',    source: 'WSJ Markets' },
+  { url: 'https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines', category: 'Finance', source: 'MarketWatch' },
+  { url: 'https://feeds.arstechnica.com/arstechnica/index',         category: 'Technology', source: 'Ars Technica' },
+  { url: 'https://www.wired.com/feed/rss',                          category: 'Technology', source: 'Wired' },
   { url: 'https://www.theverge.com/rss/index.xml',                  category: 'Technology', source: 'The Verge' },
-  { url: 'https://techcrunch.com/feed/',                            category: 'Technology', source: 'TechCrunch' },
   { url: 'https://www.pymnts.com/feed/',                            category: 'Ecommerce',  source: 'PYMNTS' },
   { url: 'https://feeds.feedburner.com/practical-ecommerce',        category: 'Ecommerce',  source: 'Practical Ecommerce' },
 ];
@@ -155,7 +155,6 @@ async function fetchAllFeeds() {
 
 // ─── HTML Fragment Builders ───────────────────────────────────────────────────
 
-// Global error handler — called inline by onerror on article images
 window.briefdImgError = function (img) {
   const ph = document.createElement('div');
   ph.className = 'article-image image-placeholder';
@@ -229,7 +228,6 @@ function renderSidebar(articles) {
 }
 
 function renderNewspaper(articles) {
-  // Clear any previously appended load-more sections
   document.querySelectorAll('.hero-slot.appended, .row-two.appended, .row-three.appended').forEach(el => el.remove());
 
   renderHero(articles[0] || null);
@@ -249,7 +247,7 @@ function appendMoreArticles() {
   const pool = window.remainingArticles || [];
   if (!pool.length) return;
 
-  const batch    = pool.splice(0, 6);
+  const batch = pool.splice(0, 6);
   window.remainingArticles = pool;
 
   const gridMain     = document.querySelector('.grid-main');
@@ -324,11 +322,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   const grid   = document.getElementById('newspaper-grid');
 
   try {
-    const articles    = await fetchAllFeeds();
+    const articles     = await fetchAllFeeds();
     window.allArticles = articles;
-
-    loader.hidden = true;
-    grid.hidden   = false;
+    loader.hidden      = true;
+    grid.hidden        = false;
     renderNewspaper(articles);
   } catch (err) {
     loader.innerHTML = '<p class="error-msg">Could not load news. Try refreshing.</p>';
