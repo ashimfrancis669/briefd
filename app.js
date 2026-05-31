@@ -217,7 +217,11 @@ function renderSidebar(articles) {
 
 function renderNewspaper(articles) {
   document.querySelectorAll('.hero-slot.appended, .row-two.appended, .row-three.appended').forEach(el => el.remove());
-  renderHero(articles[0] || null);
+  if (!articles || articles.length === 0) {
+    document.getElementById('loader').innerHTML = '<p class="error-msg">No articles found. Try refreshing.</p>';
+    return;
+  }
+  renderHero(articles[0]);
   renderMedium(articles.slice(1, 3));
   renderSmall(articles.slice(3, 6));
   renderSidebar(articles.slice(0, 8));
@@ -225,7 +229,6 @@ function renderNewspaper(articles) {
   const btn = document.getElementById('load-more');
   btn.style.display = window.remainingArticles.length ? '' : 'none';
 }
-
 // ─── Load More ────────────────────────────────────────────────────────────────
 
 function appendMoreArticles() {
