@@ -1,19 +1,6 @@
 'use strict';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
-
-const RSS_FEEDS = [
-  { url: 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664', category: 'Finance',    source: 'CNBC' },
-  { url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',          category: 'Finance',    source: 'WSJ Markets' },
-  { url: 'https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines', category: 'Finance', source: 'MarketWatch' },
-  { url: 'https://feeds.arstechnica.com/arstechnica/index',         category: 'Technology', source: 'Ars Technica' },
-  { url: 'https://www.wired.com/feed/rss',                          category: 'Technology', source: 'Wired' },
-  { url: 'https://www.theverge.com/rss/index.xml',                  category: 'Technology', source: 'The Verge' },
-  { url: 'https://www.pymnts.com/feed/',                            category: 'Ecommerce',  source: 'PYMNTS' },
-  { url: 'https://feeds.feedburner.com/practical-ecommerce',        category: 'Ecommerce',  source: 'Practical Ecommerce' },
-];
-
-const PROXY     = 'https://api.rss2json.com/v1/api.json';
+const API_KEY  = 'pub_65775f28d35647a8861b3d110df8b6ce';
 const CACHE_KEY = 'briefd_cache';
 const CACHE_TTL = 30 * 60 * 1000;
 
@@ -22,6 +9,12 @@ const CATEGORY_COLORS = {
   Technology: '#2A4A1B',
   Ecommerce:  '#4A1B2A',
 };
+
+const QUERIES = [
+  { category: 'Finance',    q: 'finance',   domain: '' },
+  { category: 'Technology', q: 'technology',domain: '' },
+  { category: 'Ecommerce',  q: 'ecommerce', domain: '' },
+];
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
@@ -77,9 +70,7 @@ function safeUrl(url) {
   try {
     const u = new URL(url);
     return (u.protocol === 'http:' || u.protocol === 'https:') ? url : '#';
-  } catch {
-    return '#';
-  }
+  } catch { return '#'; }
 }
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
@@ -91,48 +82,37 @@ function getCached() {
     const { data, timestamp } = JSON.parse(raw);
     if (Date.now() - timestamp > CACHE_TTL) return null;
     return Array.isArray(data) ? data : null;
-  } catch {
-    return null;
-  }
+  } catch { return null; }
 }
 
 function setCached(data) {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify({ data, timestamp: Date.now() }));
-  } catch {
-    // quota exceeded — skip
-  }
+  } catch {}
 }
 
-// ─── Fetch & Normalize ────────────────────────────────────────────────────────
+// ─── Fetch ────────────────────────────────────────────────────────────────────
 
 async function fetchAllFeeds() {
   const cached = getCached();
   if (cached) return cached;
 
   const results = await Promise.allSettled(
-    RSS_FEEDS.map(async feed => {
-      const endpoint = `https://api.allorigins.win/get?url=${encodeURIComponent(feed.url)}`;
-      const res  = await fetch(endpoint);
+    QUERIES.map(async ({ category, q }) => {
+      const url = `https://newsdata.io/api/1/news?apikey=${API_KEY}&q=${encodeURIComponent(q)}&language=en&size=10`;
+      const res  = await fetch(url);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      const parser = new DOMParser();
-      const xml = parser.parseFromString(json.contents, 'text/xml');
-      const items = [...xml.querySelectorAll('item')];
-      return items.slice(0, 10).map(item => {
-        const get = tag => item.querySelector(tag)?.textContent?.trim() || '';
-        const img = item.querySelector('enclosure')?.getAttribute('url') ||
-                    item.querySelector('thumbnail')?.getAttribute('url') || null;
-        return {
-          title:       get('title'),
-          url:         get('link'),
-          source:      feed.source,
-          category:    feed.category,
-          publishedAt: get('pubDate') ? new Date(get('pubDate')).toISOString() : '',
-          imageUrl:    img,
-          description: extractSummary(get('description') || get('summary') || ''),
-        };
-      }).filter(a => a.title);
+      if (json.status !== 'success') throw new Error(json.message || 'API error');
+      return (json.results || []).map(item => ({
+        title:       (item.title || '').trim(),
+        url:         item.link || '',
+        source:      item.source_name || item.source_id || 'Unknown',
+        category,
+        publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : '',
+        imageUrl:    item.image_url || null,
+        description: extractSummary(item.description || item.content || ''),
+      }));
     })
   );
 
@@ -160,7 +140,7 @@ async function fetchAllFeeds() {
   return articles;
 }
 
-// ─── HTML Fragment Builders ───────────────────────────────────────────────────
+// ─── HTML Builders ────────────────────────────────────────────────────────────
 
 window.briefdImgError = function (img) {
   const ph = document.createElement('div');
@@ -191,6 +171,7 @@ function headlineHtml(a, cls) {
 
 function renderHero(article, container) {
   const el = container || document.getElementById('hero');
+  if (!article) { el.innerHTML = ''; return; }
   el.innerHTML = `
     ${imgHtml(article)}
     <span class="article-category">${escHtml(article.category)}</span>
@@ -236,14 +217,11 @@ function renderSidebar(articles) {
 
 function renderNewspaper(articles) {
   document.querySelectorAll('.hero-slot.appended, .row-two.appended, .row-three.appended').forEach(el => el.remove());
-
   renderHero(articles[0] || null);
   renderMedium(articles.slice(1, 3));
   renderSmall(articles.slice(3, 6));
   renderSidebar(articles.slice(0, 8));
-
   window.remainingArticles = articles.slice(6);
-
   const btn = document.getElementById('load-more');
   btn.style.display = window.remainingArticles.length ? '' : 'none';
 }
@@ -253,48 +231,38 @@ function renderNewspaper(articles) {
 function appendMoreArticles() {
   const pool = window.remainingArticles || [];
   if (!pool.length) return;
-
   const batch = pool.splice(0, 6);
   window.remainingArticles = pool;
-
   const gridMain     = document.querySelector('.grid-main');
   const loadMoreWrap = document.getElementById('load-more').parentElement;
-
   if (batch[0]) {
     const sec = document.createElement('section');
     sec.className = 'hero-slot appended';
     renderHero(batch[0], sec);
     gridMain.insertBefore(sec, loadMoreWrap);
   }
-
   if (batch[1]) {
     const sec = document.createElement('section');
     sec.className = 'row-two appended';
     renderMedium(batch.slice(1, 3), sec);
     gridMain.insertBefore(sec, loadMoreWrap);
   }
-
   if (batch[3]) {
     const sec = document.createElement('section');
     sec.className = 'row-three appended';
     renderSmall(batch.slice(3, 6), sec);
     gridMain.insertBefore(sec, loadMoreWrap);
   }
-
-  if (!pool.length) {
-    document.getElementById('load-more').style.display = 'none';
-  }
+  if (!pool.length) document.getElementById('load-more').style.display = 'none';
 }
 
-// ─── Filtering ────────────────────────────────────────────────────────────────
+// ─── Filter & Tabs ────────────────────────────────────────────────────────────
 
 function filterAndRender(category) {
   const all      = window.allArticles || [];
   const filtered = category === 'All' ? all : all.filter(a => a.category === category);
   renderNewspaper(filtered);
 }
-
-// ─── Tabs ─────────────────────────────────────────────────────────────────────
 
 function initTabs() {
   document.querySelectorAll('.tab').forEach(tab => {
