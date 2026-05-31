@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BRIEFD</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400;1,700&family=Source+Serif+4:ital,opsz,wght@0,8..60,300;0,8..60,400;0,8..60,600;1,8..60,300;1,8..60,400&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- MASTHEAD -->
+  <header class="masthead">
+    <hr class="rule-gold" />
+    <div class="masthead-inner">
+      <div class="masthead-date" id="masthead-date"></div>
+      <div class="masthead-center">
+        <h1 class="masthead-title">BRIEFD</h1>
+        <p class="masthead-tagline">Finance &middot; Technology &middot; E-Commerce</p>
+      </div>
+      <div class="masthead-spacer"></div>
+    </div>
+    <hr class="rule-gold" />
+  </header>
+
+  <!-- SECTION TABS -->
+  <nav class="section-tabs" role="tablist" aria-label="News categories">
+    <button class="tab active" data-category="All"        role="tab" aria-selected="true">All</button>
+    <button class="tab"        data-category="Finance"    role="tab" aria-selected="false">Finance</button>
+    <button class="tab"        data-category="Technology" role="tab" aria-selected="false">Technology</button>
+    <button class="tab"        data-category="Ecommerce"  role="tab" aria-selected="false">E-Commerce</button>
+  </nav>
+
+  <!-- LOADER -->
+  <div id="loader" class="loader" aria-label="Loading articles" role="status">
+    <div class="spinner"></div>
+  </div>
+
+  <!-- NEWSPAPER GRID -->
+  <main id="newspaper-grid" class="newspaper-grid" hidden>
+
+    <div class="grid-main">
+      <!-- Hero article -->
+      <section id="hero" class="hero-slot"></section>
+
+      <!-- Two medium articles -->
+      <section id="row-two" class="row-two"></section>
+
+      <!-- Three small articles -->
+      <section id="row-three" class="row-three"></section>
+
+      <!-- Load more -->
+      <div class="load-more-wrap">
+        <button id="load-more" class="load-more-btn">Load More</button>
+      </div>
+    </div>
+
+    <aside class="sidebar">
+      <h2 class="sidebar-heading">Latest</h2>
+      <ul id="sidebar-list" class="sidebar-list"></ul>
+    </aside>
+
+  </main>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <hr class="rule-gold" />
+    <p>BRIEFD &middot; Powered by RSS &middot; Built with Claude Code</p>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
