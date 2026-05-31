@@ -112,20 +112,27 @@ async function fetchAllFeeds() {
 
   const results = await Promise.allSettled(
     RSS_FEEDS.map(async feed => {
-      const endpoint = `${PROXY}?rss_url=${encodeURIComponent(feed.url)}&api_key=public&count=10`;
+      const endpoint = `https://api.allorigins.win/get?url=${encodeURIComponent(feed.url)}`;
       const res  = await fetch(endpoint);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const json = await res.json();
-      if (json.status !== 'ok') throw new Error(json.message || 'feed error');
-      return (json.items || []).map(item => ({
-        title:       (item.title || '').trim(),
-        url:         item.link || '',
-        source:      feed.source,
-        category:    feed.category,
-        publishedAt: item.pubDate ? new Date(item.pubDate).toISOString() : '',
-        imageUrl:    item.thumbnail || (item.enclosure && item.enclosure.link) || null,
-        description: extractSummary(item.content || item.description || ''),
-      }));
+      const parser = new DOMParser();
+      const xml = parser.parseFromString(json.contents, 'text/xml');
+      const items = [...xml.querySelectorAll('item')];
+      return items.slice(0, 10).map(item => {
+        const get = tag => item.querySelector(tag)?.textContent?.trim() || '';
+        const img = item.querySelector('enclosure')?.getAttribute('url') ||
+                    item.querySelector('thumbnail')?.getAttribute('url') || null;
+        return {
+          title:       get('title'),
+          url:         get('link'),
+          source:      feed.source,
+          category:    feed.category,
+          publishedAt: get('pubDate') ? new Date(get('pubDate')).toISOString() : '',
+          imageUrl:    img,
+          description: extractSummary(get('description') || get('summary') || ''),
+        };
+      }).filter(a => a.title);
     })
   );
 
