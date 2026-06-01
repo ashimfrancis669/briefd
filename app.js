@@ -2,8 +2,9 @@
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
-const CACHE_KEY = 'briefd_cache';
-const CACHE_TTL = 30 * 60 * 1000;
+const GUARDIAN_KEY = '1dbcbf93-2585-4d4f-875b-5477647a47fd';
+const CACHE_KEY    = 'briefd_cache';
+const CACHE_TTL    = 30 * 60 * 1000;
 
 const CATEGORY_COLORS = {
   Finance:    '#1B2A4A',
@@ -11,22 +12,20 @@ const CATEGORY_COLORS = {
   Ecommerce:  '#4A1B2A',
 };
 
-// Reddit JSON endpoints — no auth, no CORS issues
-const REDDIT_FEEDS = [
-  { url: 'https://www.reddit.com/r/finance/top.json?limit=10&t=day',       category: 'Finance',    source: 'r/finance' },
-  { url: 'https://www.reddit.com/r/investing/top.json?limit=10&t=day',     category: 'Finance',    source: 'r/investing' },
-  { url: 'https://www.reddit.com/r/Economics/top.json?limit=10&t=day',     category: 'Finance',    source: 'r/Economics' },
-  { url: 'https://www.reddit.com/r/technology/top.json?limit=10&t=day',    category: 'Technology', source: 'r/technology' },
-  { url: 'https://www.reddit.com/r/Futurology/top.json?limit=10&t=day',    category: 'Technology', source: 'r/Futurology' },
-  { url: 'https://www.reddit.com/r/ecommerce/top.json?limit=10&t=day',     category: 'Ecommerce',  source: 'r/ecommerce' },
-  { url: 'https://www.reddit.com/r/Entrepreneur/top.json?limit=10&t=day',  category: 'Ecommerce',  source: 'r/Entrepreneur' },
+const GUARDIAN_QUERIES = [
+  { section: 'business',  category: 'Finance',    source: 'The Guardian' },
+  { section: 'money',     category: 'Finance',    source: 'The Guardian' },
+  { section: 'technology',category: 'Technology', source: 'The Guardian' },
+  { section: 'business',  category: 'Ecommerce',  source: 'The Guardian', q: 'ecommerce OR retail OR shopping' },
 ];
 
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
-function timeAgo(timestamp) {
-  if (!timestamp) return '';
-  const diff = Date.now() - (timestamp * 1000);
+function timeAgo(dateString) {
+  if (!dateString) return '';
+  const then = new Date(dateString).getTime();
+  if (isNaN(then)) return '';
+  const diff = Date.now() - then;
   const mins = Math.floor(diff / 60000);
   const hrs  = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
@@ -38,9 +37,9 @@ function timeAgo(timestamp) {
 
 function extractSummary(text) {
   if (!text) return '';
-  const clean = text.replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+  const clean = text.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
   const parts = clean.split('. ');
-  return parts.slice(0, 2).join('. ').slice(0, 300) + (clean.length > 300 ? '.' : '');
+  return parts.slice(0, 2).join('. ').slice(0, 300) + '.';
 }
 
 function firstSentence(text) {
@@ -85,36 +84,24 @@ function setCached(data) {
 
 // ─── Fetch ────────────────────────────────────────────────────────────────────
 
-async function fetchReddit(feed) {
-  const res  = await fetch(feed.url, {
-    headers: { 'Accept': 'application/json' }
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+async function fetchGuardian({ section, category, source, q }) {
+  let url = `https://content.guardianapis.com/${section}?api-key=${GUARDIAN_KEY}&show-fields=thumbnail,trailText&page-size=10&order-by=newest`;
+  if (q) url += `&q=${encodeURIComponent(q)}`;
+  const res  = await fetch(url);
+  if (!res.ok) throw new Error(`Guardian HTTP ${res.status}`);
   const json = await res.json();
-  const posts = json?.data?.children || [];
-  return posts
-    .filter(p => !p.data.stickied && p.data.score > 5)
-    .map(p => {
-      const d = p.data;
-      // Get image: use thumbnail only if it's a real image URL
-      const thumb = d.thumbnail && d.thumbnail.startsWith('http') &&
-                    !d.thumbnail.includes('self') && !d.thumbnail.includes('default')
-                    ? d.thumbnail : null;
-      return {
-        title:       d.title || '',
-        url:         d.url || `https://reddit.com${d.permalink}`,
-        source:      feed.source,
-        category:    feed.category,
-        publishedAt: d.created_utc,  // unix timestamp
-        imageUrl:    thumb,
-        description: extractSummary(d.selftext || d.title || ''),
-      };
-    })
-    .filter(a => a.title);
+  return (json.response?.results || []).map(item => ({
+    title:       item.webTitle || '',
+    url:         item.webUrl   || '',
+    source,
+    category,
+    publishedAt: item.webPublicationDate || '',
+    imageUrl:    item.fields?.thumbnail  || null,
+    description: extractSummary(item.fields?.trailText || item.webTitle || ''),
+  })).filter(a => a.title);
 }
 
 async function fetchHackerNews() {
-  // Fetch top 20 HN story IDs, then get details for first 15
   const idsRes = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
   const ids    = await idsRes.json();
   const top    = ids.slice(0, 15);
@@ -132,7 +119,7 @@ async function fetchHackerNews() {
       url:         s.url,
       source:      'Hacker News',
       category:    'Technology',
-      publishedAt: s.time,  // unix timestamp
+      publishedAt: new Date(s.time * 1000).toISOString(),
       imageUrl:    null,
       description: extractSummary(s.title),
     }));
@@ -142,34 +129,30 @@ async function fetchAllFeeds() {
   const cached = getCached();
   if (cached) return cached;
 
-  // Fetch Reddit feeds + HackerNews in parallel
-  const [hnStories, ...redditResults] = await Promise.allSettled([
+  const results = await Promise.allSettled([
     fetchHackerNews(),
-    ...REDDIT_FEEDS.map(feed => fetchReddit(feed)),
+    ...GUARDIAN_QUERIES.map(q => fetchGuardian(q)),
   ]);
 
   const seen     = new Set();
   const articles = [];
 
-  // Add HN stories
-  if (hnStories.status === 'fulfilled') {
-    for (const a of hnStories.value) {
-      const key = a.title.toLowerCase();
-      if (!seen.has(key)) { seen.add(key); articles.push(a); }
-    }
-  }
-
-  // Add Reddit posts
-  for (const result of redditResults) {
+  for (const result of results) {
     if (result.status !== 'fulfilled') continue;
     for (const a of result.value) {
+      if (!a.title) continue;
       const key = a.title.toLowerCase();
-      if (!seen.has(key)) { seen.add(key); articles.push(a); }
+      if (seen.has(key)) continue;
+      seen.add(key);
+      articles.push(a);
     }
   }
 
-  // Sort by publishedAt descending (unix timestamps)
-  articles.sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0));
+  articles.sort((a, b) => {
+    if (!a.publishedAt) return 1;
+    if (!b.publishedAt) return -1;
+    return new Date(b.publishedAt) - new Date(a.publishedAt);
+  });
 
   setCached(articles);
   return articles;
@@ -195,8 +178,7 @@ function imgHtml(article) {
 }
 
 function metaHtml(a) {
-  const t = typeof a.publishedAt === 'number' ? timeAgo(a.publishedAt) : '';
-  return `<span class="article-meta">${escHtml(a.source)}${t ? ' &middot; ' + escHtml(t) : ''}</span>`;
+  return `<span class="article-meta">${escHtml(a.source)} &middot; ${escHtml(timeAgo(a.publishedAt))}</span>`;
 }
 
 function headlineHtml(a, cls) {
@@ -246,7 +228,7 @@ function renderSidebar(articles) {
   document.getElementById('sidebar-list').innerHTML = articles.slice(0, 8).map(a => `
     <li class="sidebar-item">
       <a class="sidebar-headline" href="${escHtml(safeUrl(a.url))}" target="_blank" rel="noopener noreferrer">${escHtml(a.title)}</a>
-      <span class="sidebar-timestamp">${escHtml(typeof a.publishedAt === 'number' ? timeAgo(a.publishedAt) : '')}</span>
+      <span class="sidebar-timestamp">${escHtml(timeAgo(a.publishedAt))}</span>
     </li>
   `).join('');
 }
@@ -255,7 +237,7 @@ function renderNewspaper(articles) {
   document.querySelectorAll('.hero-slot.appended, .row-two.appended, .row-three.appended').forEach(el => el.remove());
 
   if (!articles || articles.length === 0) {
-    document.getElementById('loader').hidden = false;
+    document.getElementById('loader').style.display = 'block';
     document.getElementById('loader').innerHTML = '<p class="error-msg">No articles found. Try refreshing.</p>';
     document.getElementById('newspaper-grid').hidden = true;
     return;
@@ -349,8 +331,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       return;
     }
 
-    loader.hidden = true;
-    grid.hidden   = false;
+    loader.style.display = 'none';
+    grid.hidden          = false;
     renderNewspaper(articles);
   } catch (err) {
     loader.innerHTML = '<p class="error-msg">Could not load news. Try refreshing.</p>';
