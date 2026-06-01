@@ -13,12 +13,13 @@ const CATEGORY_COLORS = {
 };
 
 const GUARDIAN_QUERIES = [
-  { section: 'business',  category: 'Finance',    source: 'The Guardian' },
-  { section: 'money',     category: 'Finance',    source: 'The Guardian' },
-  { section: 'technology',category: 'Technology', source: 'The Guardian' },
-  { section: 'business',  category: 'Ecommerce',  source: 'The Guardian', q: 'ecommerce OR retail OR shopping' },
+  { section: 'business',         category: 'Finance',    source: 'The Guardian' },
+  { section: 'money',            category: 'Finance',    source: 'The Guardian' },
+  { section: 'technology',       category: 'Technology', source: 'The Guardian' },
+  { section: 'technology',       category: 'Technology', source: 'The Guardian', q: 'AI OR software OR startup' },
+  { section: 'business',         category: 'Ecommerce',  source: 'The Guardian', q: 'retail OR Amazon OR ecommerce OR online shopping' },
+  { section: 'consumer-affairs', category: 'Ecommerce',  source: 'The Guardian' },
 ];
-
 // ─── Utilities ────────────────────────────────────────────────────────────────
 
 function timeAgo(dateString) {
